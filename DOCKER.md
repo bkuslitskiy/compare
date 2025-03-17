@@ -13,8 +13,8 @@ This guide provides instructions for deploying the TV Show & Movie Cast Comparis
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/tv-show-movie-comparison.git
-cd tv-show-movie-comparison
+git clone https://github.com/bkuslitskiy/compare.git
+cd compare
 ```
 
 ### Step 2: Set Environment Variables
@@ -65,8 +65,8 @@ docker-compose down
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/tv-show-movie-comparison.git
-cd tv-show-movie-comparison
+git clone https://github.com/bkuslitskiy/compare.git
+cd compare
 ```
 
 ### Step 2: Build the Docker Image

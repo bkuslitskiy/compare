@@ -23,8 +23,8 @@ A comprehensive web application for comparing cast and crew across multiple TV s
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/tv-show-movie-comparison.git
-cd tv-show-movie-comparison
+git clone https://github.com/bkuslitskiy/compare.git
+cd compare
 ```
 
 ### 2. Install dependencies
