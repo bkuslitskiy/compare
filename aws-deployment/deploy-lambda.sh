@@ -24,4 +24,11 @@ aws lambda update-function-code \
   --zip-file fileb://lambda/dist/compare.zip \
   --region $REGION
 
+# Deploy bff function
+echo "Deploying bff function..."
+aws lambda update-function-code \
+  --function-name compare-shows-bff \
+  --zip-file fileb://lambda/dist/bff.zip \
+  --region $REGION
+
 echo "Lambda deployment complete!"

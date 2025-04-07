@@ -24,4 +24,8 @@ zip -r dist/project.zip project.js utils.js node_modules
 echo "Creating compare function package..."
 zip -r dist/compare.zip compare.js utils.js node_modules
 
+# Package bff function
+echo "Creating bff function package..."
+zip -r dist/bff.zip bff.js utils.js node_modules
+
 echo "Lambda packages prepared successfully!"
