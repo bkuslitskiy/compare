@@ -1,5 +1,5 @@
 // Constants
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'https://ipoxasb5d5.execute-api.us-east-1.amazonaws.com/prod/bff';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 const POSTER_SIZE = 'w500';
 const PROFILE_SIZE = 'w185';
@@ -285,13 +285,18 @@ async function fetchSuggestions(query, dropdownElement) {
         let endpoint = isImdbId 
             ? `${API_BASE_URL}/search/imdb/${query}`
             : `${API_BASE_URL}/search/multi?query=${encodeURIComponent(query)}`;
-        
+
+        console.log('Fetching suggestions from endpoint:', endpoint); // Added log
+
         const response = await fetch(endpoint);
-        
+
+        console.log('Received response status:', response.status, response.statusText); // Added log
+
         if (!response.ok) {
-            throw new Error('Failed to fetch suggestions');
+            console.error('Server returned error status:', response.status, response.statusText); // Added log
+            throw new Error(`Failed to fetch suggestions (Status: ${response.status})`); // Added status to error
         }
-        
+
         const data = await response.json();
         
         // Clear previous suggestions
@@ -605,7 +610,7 @@ async function fetchComparisonData() {
         const response = await fetch(`${API_BASE_URL}/compare`, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
             },
             body: JSON.stringify({ projects: projectIds })
         });
@@ -667,34 +672,34 @@ function displayProjectsSummary() {
 
 // Helper function to determine role type from job or department
 function getRoleType(job, department) {
-    job = (job || '').toLowerCase();
-    department = (department || '').toLowerCase();
+    const jobLower = (job || '').toLowerCase();
+    const departmentLower = (department || '').toLowerCase();
     
-    if (department === 'acting' || job === 'actor' || job === 'actress') {
+    if (departmentLower === 'acting' || jobLower === 'actor' || jobLower === 'actress') {
         return 'actor';
-    } else if (job === 'director' || job === 'co-director') {
+    } else if (jobLower === 'director' || jobLower === 'co-director') {
         return 'director';
-    } else if (job === 'writer' || job === 'screenplay' || department === 'writing') {
+    } else if (jobLower === 'writer' || jobLower === 'screenplay' || departmentLower === 'writing') {
         return 'writer';
-    } else if (job.includes('producer') || department === 'production') {
+    } else if (jobLower.includes('producer') || departmentLower === 'production') {
         return 'producer';
-    } else if (job.includes('stunt') || department === 'stunts') {
+    } else if (jobLower.includes('stunt') || departmentLower === 'stunts') {
         return 'stunts';
-    } else if (department === 'sound' || job.includes('sound') || job.includes('composer') || job.includes('music')) {
+    } else if (departmentLower === 'sound' || jobLower.includes('sound') || jobLower.includes('composer') || jobLower.includes('music')) {
         return 'music';
-    } else if (department === 'camera' || job.includes('camera') || job.includes('cinematograph')) {
+    } else if (departmentLower === 'camera' || jobLower.includes('camera') || jobLower.includes('cinematograph')) {
         return 'camera';
-    } else if (department === 'art' || job.includes('design') || job.includes('art')) {
+    } else if (departmentLower === 'art' || jobLower.includes('design') || jobLower.includes('art')) {
         return 'art';
-    } else if (department === 'editing' || job.includes('editor')) {
+    } else if (departmentLower === 'editing' || jobLower.includes('editor')) {
         return 'editing';
-    } else if (department === 'sound' || job.includes('sound')) {
+    } else if (departmentLower === 'sound' || jobLower.includes('sound')) {
         return 'sound';
-    } else if (department === 'visual effects' || job.includes('vfx') || job.includes('visual effect')) {
+    } else if (departmentLower === 'visual effects' || jobLower.includes('vfx') || jobLower.includes('visual effect')) {
         return 'vfx';
-    } else if (department === 'production design' || job.includes('production design') || 
-               job.includes('set design') || job.includes('lighting') || 
-               job.includes('set decoration') || job.includes('costume design')) {
+    } else if (departmentLower === 'production design' || jobLower.includes('production design') || 
+               jobLower.includes('set design') || jobLower.includes('lighting') || 
+               jobLower.includes('set decoration') || jobLower.includes('costume design')) {
         return 'production-design';
     }
     

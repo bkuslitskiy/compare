@@ -1,0 +1,9 @@
+{
+  "name": "compare-shows-lambda",
+  "version": "1.0.0",
+  "description": "Lambda functions for Compare TV Shows application",
+  "dependencies": {
+    "aws-sdk": "^2.1048.0",
+    "axios": "^0.24.0"
+  }
+}

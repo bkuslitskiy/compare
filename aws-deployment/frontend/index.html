@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Looking to compare a few TV shows and movies to see their overlap and figure out whose work you love?">
+    <title>Cast + Crew = Comparison</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+<header>
+        <div class="container">
+            <div class="header-content">
+                <div class="header-title">
+                    <h1>Cast & Crew Comparison</h1>
+                    <p>Compare actors, directors, and crew members across multiple TV shows and movies</p>
+                </div>
+                <div class="theme-toggle-container">
+                    <div class="theme-toggle">
+                        <input type="radio" id="light-theme" name="theme" value="light">
+                        <input type="radio" id="system-theme" name="theme" value="system" checked>
+                        <input type="radio" id="dark-theme" name="theme" value="dark">
+                        <div class="slider"></div>
+                        <div class="toggle-labels">
+                            <label for="light-theme" title="Light Mode"><i class="fas fa-sun"></i></label>
+                            <label for="system-theme" title="System Default"><i class="fas fa-desktop"></i></label>
+                            <label for="dark-theme" title="Dark Mode"><i class="fas fa-moon"></i></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="search-section">
+            <h2>Enter TV Shows or Movies to Compare</h2>
+            <p class="hint">Enter show/movie names or IMDB IDs (e.g., tt0944947 for Game of Thrones)</p>
+            
+            <form id="comparison-form">
+                <div id="project-inputs">
+                    <div class="project-input">
+                        <div class="input-wrapper">
+                            <input type="text" class="project-name" placeholder="Enter TV show or movie name" required>
+                            <div class="suggestions-dropdown"></div>
+                        </div>
+                    </div>
+                    <div class="project-input">
+                        <div class="input-wrapper">
+                            <input type="text" class="project-name" placeholder="Enter TV show or movie name" required>
+                            <div class="suggestions-dropdown"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-controls">
+                    <button type="button" id="add-project-btn">
+                        <i class="fas fa-plus"></i> Add Another Project
+                    </button>
+                    <button type="submit" id="compare-btn">
+                        <i class="fas fa-search"></i> Compare
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section id="confirmation-section" class="hidden">
+            <h2>Confirm Your Selections</h2>
+            <p>We found multiple matches for some of your entries. Please select the correct ones:</p>
+            
+            <div id="confirmation-projects"></div>
+            
+            <div class="form-controls">
+                <button type="button" id="back-btn">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <button type="button" id="confirm-selections-btn">
+                    <i class="fas fa-check"></i> Confirm Selections
+                </button>
+            </div>
+        </section>
+
+        <section id="results-section" class="hidden">
+            <div class="results-header">
+                <h2>Comparison Results</h2>
+                <div class="filter-controls">
+                    <div class="filter-group">
+                        <label for="role-filter">Filter by Role:</label>
+                        <select id="role-filter">
+                            <option value="all">All Roles</option>
+                            <option value="cast">Cast Only</option>
+                            <option value="crew">Crew Only</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="role-type-filter">Role Type:</label>
+                        <select id="role-type-filter">
+                            <option value="all">All Types</option>
+                            <option value="actor">Actor</option>
+                            <option value="director">Director</option>
+                            <option value="writer">Writer</option>
+                            <option value="producer">Producer</option>
+                            <option value="stunts">Stunts</option>
+                            <option value="music">Music</option>
+                            <option value="camera">Camera</option>
+                            <option value="art">Art</option>
+                            <option value="editing">Editing</option>
+                            <option value="sound">Sound</option>
+                            <option value="vfx">Visual Effects</option>
+                            <option value="production-design">Production Design</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="sort-by">Sort by:</label>
+                        <select id="sort-by">
+                            <option value="billing">Billing Order</option>
+                            <option value="name">Name (A-Z)</option>
+                            <option value="appearances">Number of Appearances</option>
+                            <option value="role">Role</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="min-appearances">Min. Projects:</label>
+                        <select id="min-appearances">
+                            <option value="1">1+</option>
+                            <option value="2" selected>2+</option>
+                            <option value="3">3+</option>
+                            <option value="all">All Projects</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="projects-summary"></div>
+            
+            <div id="comparison-results">
+                <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Loading results...</p>
+                </div>
+            </div>
+            
+            <button type="button" id="new-comparison-btn">
+                <i class="fas fa-redo"></i> New Comparison
+            </button>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Powered by <a href="https://www.themoviedb.org/" target="_blank">The Movie Database API</a></p>
+            <p>Created by VSCode with Cline, Guided by <a href="https://linkedin.com/in/boris-kuslitskiy" target="_blank">Boris Kuslitskiy</a>, Used by You</p>
+            <p>&copy; <span id="current-year"></span> Cast & Crew Comparison Tool</p>
+        </div>
+    </footer>
+
+    <!-- Templates -->
+    <template id="project-card-template">
+        <div class="project-card">
+            <img class="project-poster" src="" alt="">
+            <div class="project-details">
+                <h3 class="project-title"></h3>
+                <p class="project-year"></p>
+                <p class="project-type"></p>
+            </div>
+            <div class="project-selection">
+                <input type="radio" name="" value="">
+                <label>Select</label>
+            </div>
+        </div>
+    </template>
+
+    <template id="person-card-template">
+        <div class="person-card">
+            <div class="person-header">
+                <img class="person-image" src="" alt="">
+                <div class="person-info">
+                    <div class="person-info-top">
+                        <h3 class="person-name"></h3>
+                        <button class="expand-btn">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                    </div>
+                    <p class="person-appearances"></p>
+                    <div class="role-tags"></div>
+                </div>
+            </div>
+            <div class="person-details hidden">
+                <div class="projects-list"></div>
+            </div>
+        </div>
+    </template>
+
+    <script src="js/background.js"></script>
+    <script src="js/app.js" type="module"></script>
+    <script>
+        // Set current year in footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>

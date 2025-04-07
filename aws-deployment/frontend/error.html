@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - TV Show & Movie Cast Comparison</title>
+    <link rel="stylesheet" href="/css/error.css">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Cast & Crew Comparison</h1>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="error-container">
+            <h1 class="error-code">{{statusCode}}</h1>
+            <h2 class="error-message">{{message}}</h2>
+            <p class="error-description">{{description}}</p>
+            <a href="/" class="button">Return to Home</a>
+        </div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <p>Powered by <a href="https://www.themoviedb.org/" target="_blank">The Movie Database API</a></p>
+            <p>&copy; <span id="current-year"></span> Cast & Crew Comparison Tool</p>
+        </div>
+    </footer>
+
+    <script>
+        // Set current year in footer
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>
