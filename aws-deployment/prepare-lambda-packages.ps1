@@ -26,4 +26,8 @@ Compress-Archive -Path "project.js", "utils.js", "node_modules" -DestinationPath
 Write-Host "Creating compare function package..."
 Compress-Archive -Path "compare.js", "utils.js", "node_modules" -DestinationPath "dist\compare.zip" -Force
 
+# Package bff function
+Write-Host "Creating bff function package..."
+Compress-Archive -Path "bff.js", "utils.js", "node_modules" -DestinationPath "dist\bff.zip" -Force
+
 Write-Host "Lambda packages prepared successfully!"

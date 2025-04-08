@@ -1,5 +1,5 @@
 // Constants
-const API_BASE_URL = 'https://hvycxsh3me.execute-api.us-east-1.amazonaws.com/prod';
+const API_BASE_URL = 'https://ipoxasb5d5.execute-api.us-east-1.amazonaws.com/prod';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/';
 const POSTER_SIZE = 'w500';
 const PROFILE_SIZE = 'w185';

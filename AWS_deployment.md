@@ -7,20 +7,26 @@ This guide provides detailed instructions for deploying the Compare TV Shows V2 
 1. [Prerequisites](#prerequisites)
 2. [AWS Infrastructure Setup](#aws-infrastructure-setup)
    - [S3 Bucket for Frontend](#s3-bucket-for-frontend)
+   - [DynamoDB for Caching](#dynamodb-for-caching)
    - [Lambda Functions for Backend](#lambda-functions-for-backend)
    - [API Gateway](#api-gateway)
-   - [DynamoDB for Caching](#dynamodb-for-caching)
    - [CloudFront Distribution](#cloudfront-distribution)
    - [Route 53 for DNS](#route-53-for-dns)
 3. [DNS Configuration with Siteground](#dns-configuration-with-siteground)
 4. [Local Preparation and Deployment](#local-preparation-and-deployment)
-   - [Code Modifications](#code-modifications)
+   - [Directory Structure Setup](#directory-structure-setup)
+   - [Lambda Function Files](#lambda-function-files)
+   - [Frontend Preparation](#frontend-preparation)
    - [Building and Packaging](#building-and-packaging)
    - [Deployment Scripts](#deployment-scripts)
 5. [Security Considerations](#security-considerations)
 6. [Testing and Verification](#testing-and-verification)
-7. [Troubleshooting](#troubleshooting)
-8. [Monitoring and Maintenance](#monitoring-and-maintenance)
+7. [Post-Deployment Steps](#post-deployment-steps)
+   - [Accessing Your Application](#accessing-your-application)
+   - [Using the Application](#using-the-application)
+   - [Updating the Application](#updating-the-application)
+8. [Troubleshooting](#troubleshooting)
+9. [Monitoring and Maintenance](#monitoring-and-maintenance)
 
 ## Prerequisites
 
@@ -28,8 +34,8 @@ Before starting the deployment process, ensure you have:
 
 1. An AWS account with Free Tier access
 2. AWS CLI installed and configured on your local machine
-   ```bash
-   # Install AWS CLI
+   ```powershell
+   # Install AWS CLI (using pip)
    pip install awscli
    
    # Configure with your credentials
@@ -39,6 +45,7 @@ Before starting the deployment process, ensure you have:
 4. Node.js and npm installed locally
 5. Access to your Siteground account for DNS configuration
 6. Domain ownership for useless.blog and its subdomains
+7. PowerShell 5.1 or higher
 
 ## AWS Infrastructure Setup
 
@@ -128,11 +135,11 @@ Before starting the deployment process, ensure you have:
    - Click "Create function"
    - Select "Author from scratch"
    - Enter `compare-shows-search` for the function name
-   - Select "Node.js 18.x" for the runtime
+   - Select "Node.js 20.x" for the runtime (or the latest LTS version)
    - Under "Permissions", select "Use an existing role"
    - Select the `CompareShowsLambdaRole` you created
    - Click "Create function"
-   - In the "Code" tab, upload a ZIP file containing your search function code (we'll prepare this in the local steps)
+   - In the "Code" tab, you'll upload a ZIP file containing your search function code (we'll prepare this in the local steps)
    - In the "Configuration" tab, set the following:
      - Memory: 256 MB
      - Timeout: 30 seconds
@@ -146,12 +153,13 @@ Before starting the deployment process, ensure you have:
    c. **Compare Function**:
    - Repeat the steps above, but name the function `compare-shows-compare`
 
-3. **Create Lambda Layer for Shared Code**:
+3. **Lambda Layer (Optional)**:
+   - If you prefer to manage shared code separately, you can create a Lambda Layer
    - In the Lambda console, click "Layers" in the left sidebar
    - Click "Create layer"
    - Enter `compare-shows-common` for the name
    - Upload a ZIP file containing shared code (axios, utilities, etc.)
-   - Select compatible runtimes: Node.js 18.x
+   - Select compatible runtimes: Node.js 20.x (or the version you're using)
    - Click "Create"
    - Attach this layer to all your Lambda functions
 
@@ -319,413 +327,31 @@ Before starting the deployment process, ensure you have:
 
 ## Local Preparation and Deployment
 
-### Code Modifications
+### Directory Structure Setup
 
-1. **Create a deployment directory structure**:
-   ```bash
-   mkdir -p aws-deployment/lambda
-   mkdir -p aws-deployment/frontend
+1. **Create the deployment directory structure**:
+   ```powershell
+   # Create the main directories
+   New-Item -ItemType Directory -Path aws-deployment -Force
+   New-Item -ItemType Directory -Path aws-deployment\lambda -Force
+   New-Item -ItemType Directory -Path aws-deployment\frontend -Force
    ```
 
-2. **Modify the frontend code**:
-   - Copy your frontend files to the `aws-deployment/frontend` directory
-   - Update the API endpoint in `app.js`:
-     ```javascript
-     // Change this line
-     const API_BASE_URL = '/api';
-     
-     // To this (replace with your actual API Gateway URL)
-     const API_BASE_URL = 'https://your-api-id.execute-api.your-region.amazonaws.com/prod';
-     ```
+### Lambda Function Files
 
-3. **Create Lambda function handlers**:
+1. **Create the necessary Lambda function files**:
+   - Create `utils.js` in the lambda directory with shared utilities for all functions
+   - Create `search.js` for the search function handler
+   - Create `project.js` for the project details function handler
+   - Create `compare.js` for the compare function handler
 
-   a. **Create a shared utilities file**:
-   ```bash
-   # Create utils.js in the lambda directory
-   cat > aws-deployment/lambda/utils.js << 'EOF'
-   const AWS = require('aws-sdk');
-   const axios = require('axios');
-   const dynamoDB = new AWS.DynamoDB.DocumentClient();
+2. **Create a package.json file for Lambda functions**:
+   ```powershell
+   # Navigate to the lambda directory
+   Set-Location -Path aws-deployment\lambda
 
-   // Cache service using DynamoDB
-   const cacheService = {
-     getFromCache: async (key) => {
-       try {
-         const result = await dynamoDB.get({
-           TableName: 'tmdb-cache',
-           Key: { cacheKey: key }
-         }).promise();
-         
-         if (result.Item && result.Item.expiresAt > Math.floor(Date.now() / 1000)) {
-           console.log(`Cache hit for key: ${key}`);
-           return JSON.parse(result.Item.data);
-         }
-         console.log(`Cache miss for key: ${key}`);
-         return null;
-       } catch (error) {
-         console.error('Error getting from cache:', error);
-         return null;
-       }
-     },
-     
-     setInCache: async (key, data, ttl = 86400) => {
-       try {
-         await dynamoDB.put({
-           TableName: 'tmdb-cache',
-           Item: {
-             cacheKey: key,
-             data: JSON.stringify(data),
-             expiresAt: Math.floor(Date.now() / 1000) + ttl
-           }
-         }).promise();
-         console.log(`Cached data for key: ${key}, TTL: ${ttl} seconds`);
-       } catch (error) {
-         console.error('Error setting cache:', error);
-       }
-     }
-   };
-
-   // TMDb API configuration
-   const TMDB_API_KEY = process.env.TMDB_API_KEY;
-   const TMDB_API_BASE_URL = process.env.TMDB_API_BASE_URL || 'https://api.themoviedb.org/3';
-
-   // Create axios instance for TMDb API
-   const tmdbApi = axios.create({
-     baseURL: TMDB_API_BASE_URL,
-     params: {
-       api_key: TMDB_API_KEY
-     }
-   });
-
-   // Helper function for Lambda responses
-   const formatResponse = (statusCode, body) => {
-     return {
-       statusCode,
-       headers: {
-         'Content-Type': 'application/json',
-         'Access-Control-Allow-Origin': '*',
-         'Access-Control-Allow-Credentials': true
-       },
-       body: JSON.stringify(body)
-     };
-   };
-
-   module.exports = {
-     cacheService,
-     tmdbApi,
-     formatResponse
-   };
-   EOF
-   ```
-
-   b. **Create the search function handler**:
-   ```bash
-   # Create search.js in the lambda directory
-   cat > aws-deployment/lambda/search.js << 'EOF'
-   const { cacheService, tmdbApi, formatResponse } = require('./utils');
-
-   exports.handler = async (event) => {
-     try {
-       // Check if this is an IMDb ID search
-       if (event.pathParameters && event.pathParameters.id) {
-         const imdbId = event.pathParameters.id;
-         return await handleImdbSearch(imdbId);
-       }
-       
-       // Otherwise, it's a multi search
-       const query = event.queryStringParameters?.query;
-       
-       if (!query) {
-         return formatResponse(400, { error: 'Missing query parameter' });
-       }
-       
-       return await handleMultiSearch(query);
-     } catch (error) {
-       console.error('Search error:', error);
-       return formatResponse(500, { error: error.message });
-     }
-   };
-
-   async function handleMultiSearch(query) {
-     // Check cache first
-     const cacheKey = `search_multi_${query}`;
-     const cachedResults = await cacheService.getFromCache(cacheKey);
-     
-     if (cachedResults) {
-       return formatResponse(200, cachedResults);
-     }
-     
-     // Fetch from API if not in cache
-     const response = await tmdbApi.get('/search/multi', {
-       params: {
-         query,
-         include_adult: false,
-         language: 'en-US',
-         page: 1
-       }
-     });
-     
-     // Filter to only movies and TV shows
-     const filteredResults = {
-       ...response.data,
-       results: response.data.results.filter(
-         item => item.media_type === 'movie' || item.media_type === 'tv'
-       )
-     };
-     
-     // Store in cache (short TTL for search results)
-     await cacheService.setInCache(cacheKey, filteredResults, 3600); // 1 hour
-     
-     return formatResponse(200, filteredResults);
-   }
-
-   async function handleImdbSearch(imdbId) {
-     // Check cache first
-     const cacheKey = `search_imdb_${imdbId}`;
-     const cachedResults = await cacheService.getFromCache(cacheKey);
-     
-     if (cachedResults) {
-       return formatResponse(200, cachedResults);
-     }
-     
-     // Fetch from API if not in cache
-     const response = await tmdbApi.get('/find/' + imdbId, {
-       params: {
-         external_source: 'imdb_id',
-         language: 'en-US'
-       }
-     });
-     
-     // Combine movie and TV results and add media_type
-     const results = [
-       ...response.data.movie_results.map(item => ({ ...item, media_type: 'movie' })),
-       ...response.data.tv_results.map(item => ({ ...item, media_type: 'tv' }))
-     ];
-     
-     const formattedResults = {
-       results
-     };
-     
-     // Store in cache
-     await cacheService.setInCache(cacheKey, formattedResults);
-     
-     return formatResponse(200, formattedResults);
-   }
-   EOF
-   ```
-
-   c. **Create the project details function handler**:
-   ```bash
-   # Create project.js in the lambda directory
-   cat > aws-deployment/lambda/project.js << 'EOF'
-   const { cacheService, tmdbApi, formatResponse } = require('./utils');
-
-   exports.handler = async (event) => {
-     try {
-       const mediaType = event.pathParameters?.mediaType;
-       const id = event.pathParameters?.id;
-       
-       if (!mediaType || !id) {
-         return formatResponse(400, { error: 'Missing mediaType or id parameter' });
-       }
-       
-       if (mediaType !== 'movie' && mediaType !== 'tv') {
-         return formatResponse(400, { error: 'Invalid mediaType. Must be "movie" or "tv"' });
-       }
-       
-       // Check cache first
-       const cacheKey = `project_${mediaType}_${id}`;
-       const cachedProject = await cacheService.getFromCache(cacheKey);
-       
-       if (cachedProject) {
-         return formatResponse(200, cachedProject);
-       }
-       
-       // Fetch from API if not in cache
-       const response = await tmdbApi.get(`/${mediaType}/${id}`, {
-         params: {
-           language: 'en-US',
-           append_to_response: 'credits'
-         }
-       });
-       
-       // Add media_type to the response
-       const project = {
-         ...response.data,
-         media_type: mediaType
-       };
-       
-       // Store in cache
-       await cacheService.setInCache(cacheKey, project);
-       
-       return formatResponse(200, project);
-     } catch (error) {
-       console.error('Project details error:', error);
-       return formatResponse(500, { error: error.message });
-     }
-   };
-   EOF
-   ```
-
-   d. **Create the compare function handler**:
-   ```bash
-   # Create compare.js in the lambda directory
-   cat > aws-deployment/lambda/compare.js << 'EOF'
-   const { cacheService, tmdbApi, formatResponse } = require('./utils');
-
-   exports.handler = async (event) => {
-     try {
-       // Parse the request body
-       const body = JSON.parse(event.body);
-       
-       if (!body.projects || !Array.isArray(body.projects) || body.projects.length < 2) {
-         return formatResponse(400, { error: 'Invalid request. Must include at least 2 projects' });
-       }
-       
-       // Generate a cache key based on the projects
-       const projectIds = body.projects.map(p => `${p.media_type}-${p.id}`).sort().join('_');
-       const cacheKey = `comparison_${projectIds}`;
-       
-       // Check cache first
-       const cachedComparison = await cacheService.getFromCache(cacheKey);
-       if (cachedComparison) {
-         return formatResponse(200, cachedComparison);
-       }
-       
-       // Fetch credits for each project
-       const creditsPromises = body.projects.map(project => 
-         getProjectCredits(project.media_type, project.id)
-       );
-       
-       const creditsResults = await Promise.all(creditsPromises);
-       
-       // Process and compare the credits
-       const comparisonData = processComparisonData(body.projects, creditsResults);
-       
-       // Store in cache
-       await cacheService.setInCache(cacheKey, comparisonData, 43200); // 12 hours
-       
-       return formatResponse(200, comparisonData);
-     } catch (error) {
-       console.error('Comparison error:', error);
-       return formatResponse(500, { error: error.message });
-     }
-   };
-
-   async function getProjectCredits(mediaType, id) {
-     // Check cache first
-     const cacheKey = `credits_${mediaType}_${id}`;
-     const cachedCredits = await cacheService.getFromCache(cacheKey);
-     
-     if (cachedCredits) {
-       return cachedCredits;
-     }
-     
-     // Fetch from API if not in cache
-     const response = await tmdbApi.get(`/${mediaType}/${id}/credits`, {
-       params: {
-         language: 'en-US'
-       }
-     });
-     
-     // Add project ID and media type to each credit
-     const credits = {
-       cast: response.data.cast.map(person => ({
-         ...person,
-         project_id: id,
-         media_type: mediaType
-       })),
-       crew: response.data.crew.map(person => ({
-         ...person,
-         project_id: id,
-         media_type: mediaType
-       }))
-     };
-     
-     // Store in cache
-     await cacheService.setInCache(cacheKey, credits);
-     
-     return credits;
-   }
-
-   function processComparisonData(projects, creditsResults) {
-     // Create a map to store people by ID
-     const peopleMap = new Map();
-     
-     // Process each project's credits
-     creditsResults.forEach((credits, index) => {
-       const project = projects[index];
-       
-       // Process cast
-       credits.cast.forEach(castMember => {
-         const personId = castMember.id;
-         
-         if (!peopleMap.has(personId)) {
-           peopleMap.set(personId, {
-             id: personId,
-             name: castMember.name,
-             profile_path: castMember.profile_path,
-             cast_appearances: [],
-             crew_appearances: []
-           });
-         }
-         
-         const person = peopleMap.get(personId);
-         person.cast_appearances.push(castMember);
-       });
-       
-       // Process crew
-       credits.crew.forEach(crewMember => {
-         const personId = crewMember.id;
-         
-         if (!peopleMap.has(personId)) {
-           peopleMap.set(personId, {
-             id: personId,
-             name: crewMember.name,
-             profile_path: crewMember.profile_path,
-             cast_appearances: [],
-             crew_appearances: []
-           });
-         }
-         
-         const person = peopleMap.get(personId);
-         person.crew_appearances.push(crewMember);
-       });
-     });
-     
-     // Convert map to array and filter to only people who appear in multiple projects
-     const people = Array.from(peopleMap.values()).filter(person => {
-       // Count unique projects this person appears in
-       const uniqueProjectIds = new Set();
-       
-       // Add all project IDs from cast appearances
-       person.cast_appearances.forEach(appearance => {
-         uniqueProjectIds.add(`${appearance.media_type}-${appearance.project_id}`);
-       });
-       
-       // Add all project IDs from crew appearances
-       person.crew_appearances.forEach(appearance => {
-         uniqueProjectIds.add(`${appearance.media_type}-${appearance.project_id}`);
-       });
-       
-       // Keep only people who appear in at least 2 projects
-       return uniqueProjectIds.size >= 2;
-     });
-     
-     return {
-       projects,
-       people
-     };
-   }
-   EOF
-   ```
-
-### Building and Packaging
-
-1. **Create a package.json file for Lambda functions**:
-   ```bash
-   cat > aws-deployment/lambda/package.json << 'EOF'
+   # Create package.json
+   @'
    {
      "name": "compare-shows-lambda",
      "version": "1.0.0",
@@ -735,122 +361,167 @@ Before starting the deployment process, ensure you have:
        "axios": "^0.24.0"
      }
    }
-   EOF
-   ```
-
-2. **Install dependencies and create deployment packages**:
-   ```bash
-   # Navigate to the lambda directory
-   cd aws-deployment/lambda
-
-   # Install dependencies
-   npm install
-
-   # Create deployment packages
-   mkdir -p dist
-
-   # Package search function
-   zip -r dist/search.zip search.js utils.js node_modules
-
-   # Package project function
-   zip -r dist/project.zip project.js utils.js node_modules
-
-   # Package compare function
-   zip -r dist/compare.zip compare.js utils.js node_modules
+   '@ | Out-File -FilePath package.json -Encoding utf8
 
    # Return to the project root
-   cd ../..
+   Set-Location -Path ..\..
    ```
 
-3. **Prepare frontend files for S3**:
-   ```bash
-   # Copy frontend files
-   cp -r public/* aws-deployment/frontend/
+### Frontend Preparation
 
-   # Update API endpoint in app.js
-   # Replace this manually with your actual API Gateway URL
-   sed -i 's|const API_BASE_URL = "/api";|const API_BASE_URL = "https://your-api-id.execute-api.your-region.amazonaws.com/prod";|g' aws-deployment/frontend/js/app.js
+1. **Copy frontend files**:
+   ```powershell
+   # Copy frontend files
+   Copy-Item -Path public\* -Destination aws-deployment\frontend\ -Recurse
+   ```
+
+2. **Update the API endpoint in app.js**:
+   ```powershell
+   # Replace the API endpoint in app.js
+   # Replace YOUR-API-ID and YOUR-REGION with your actual values
+   (Get-Content aws-deployment\frontend\js\app.js) -replace 'const API_BASE_URL = "/api";', 'const API_BASE_URL = "https://YOUR-API-ID.execute-api.YOUR-REGION.amazonaws.com/prod";' | Set-Content aws-deployment\frontend\js\app.js
+   ```
+
+### Building and Packaging
+
+1. **Create a script to prepare Lambda packages**:
+   ```powershell
+   # Create the prepare-lambda-packages.ps1 script
+   @'
+   # PowerShell script to prepare Lambda deployment packages
+
+   Write-Host "Preparing Lambda deployment packages..."
+
+   # Navigate to the lambda directory
+   Set-Location -Path lambda
+
+   # Install dependencies
+   Write-Host "Installing dependencies..."
+   npm install
+
+   # Create dist directory if it doesn't exist
+   if (-not (Test-Path -Path "dist")) {
+       New-Item -ItemType Directory -Path "dist"
+   }
+
+   # Package search function
+   Write-Host "Creating search function package..."
+   Compress-Archive -Path "search.js", "utils.js", "node_modules" -DestinationPath "dist\search.zip" -Force
+
+   # Package project function
+   Write-Host "Creating project function package..."
+   Compress-Archive -Path "project.js", "utils.js", "node_modules" -DestinationPath "dist\project.zip" -Force
+
+   # Package compare function
+   Write-Host "Creating compare function package..."
+   Compress-Archive -Path "compare.js", "utils.js", "node_modules" -DestinationPath "dist\compare.zip" -Force
+
+   Write-Host "Lambda packages prepared successfully!"
+   '@ | Out-File -FilePath aws-deployment\prepare-lambda-packages.ps1 -Encoding utf8
+   ```
+
+2. **Run the script to create the Lambda packages**:
+   ```powershell
+   # Navigate to the aws-deployment directory
+   Set-Location -Path aws-deployment
+
+   # Run the script
+   .\prepare-lambda-packages.ps1
+
+   # Return to the project root
+   Set-Location -Path ..
    ```
 
 ### Deployment Scripts
 
-1. **Create a deployment script for Lambda functions**:
-   ```bash
-   cat > aws-deployment/deploy-lambda.sh << 'EOF'
-   #!/bin/bash
-   
+1. **Create a script for deploying Lambda functions**:
+   ```powershell
+   # Create the deploy-lambda.ps1 script
+   @'
+   # PowerShell script to deploy Lambda functions
+
    # Replace these with your actual values
-   REGION="us-east-1"
-   
+   $REGION = "us-east-1"
+
    # Deploy search function
-   echo "Deploying search function..."
-   aws lambda update-function-code \
-     --function-name compare-shows-search \
-     --zip-file fileb://lambda/dist/search.zip \
+   Write-Host "Deploying search function..."
+   aws lambda update-function-code `
+     --function-name compare-shows-search `
+     --zip-file fileb://lambda/dist/search.zip `
      --region $REGION
-   
+
    # Deploy project function
-   echo "Deploying project function..."
-   aws lambda update-function-code \
-     --function-name compare-shows-project \
-     --zip-file fileb://lambda/dist/project.zip \
+   Write-Host "Deploying project function..."
+   aws lambda update-function-code `
+     --function-name compare-shows-project `
+     --zip-file fileb://lambda/dist/project.zip `
      --region $REGION
-   
+
    # Deploy compare function
-   echo "Deploying compare function..."
-   aws lambda update-function-code \
-     --function-name compare-shows-compare \
-     --zip-file fileb://lambda/dist/compare.zip \
+   Write-Host "Deploying compare function..."
+   aws lambda update-function-code `
+     --function-name compare-shows-compare `
+     --zip-file fileb://lambda/dist/compare.zip `
      --region $REGION
-   
-   echo "Lambda deployment complete!"
-   EOF
-   
-   chmod +x aws-deployment/deploy-lambda.sh
+
+   Write-Host "Lambda deployment complete!"
+   '@ | Out-File -FilePath aws-deployment\deploy-lambda.ps1 -Encoding utf8
    ```
 
-2. **Create a deployment script for frontend files**:
-   ```bash
-   cat > aws-deployment/deploy-frontend.sh << 'EOF'
-   #!/bin/bash
-   
+2. **Create a script for deploying frontend files**:
+   ```powershell
+   # Create the deploy-frontend.ps1 script
+   @'
+   # PowerShell script to deploy frontend files
+
    # Replace these with your actual values
-   S3_BUCKET="your-s3-bucket-name"
-   CLOUDFRONT_DISTRIBUTION_ID="your-cloudfront-distribution-id"
-   
+   $S3_BUCKET = "your-s3-bucket-name"
+   $CLOUDFRONT_DISTRIBUTION_ID = "your-cloudfront-distribution-id"
+
    # Sync frontend files to S3
-   echo "Uploading frontend files to S3..."
+   Write-Host "Uploading frontend files to S3..."
    aws s3 sync frontend/ s3://$S3_BUCKET/ --delete
-   
+
    # Invalidate CloudFront cache
-   echo "Invalidating CloudFront cache..."
-   aws cloudfront create-invalidation \
-     --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
+   Write-Host "Invalidating CloudFront cache..."
+   aws cloudfront create-invalidation `
+     --distribution-id $CLOUDFRONT_DISTRIBUTION_ID `
      --paths "/*"
-   
-   echo "Frontend deployment complete!"
-   EOF
-   
-   chmod +x aws-deployment/deploy-frontend.sh
+
+   Write-Host "Frontend deployment complete!"
+   '@ | Out-File -FilePath aws-deployment\deploy-frontend.ps1 -Encoding utf8
    ```
 
 3. **Create a master deployment script**:
-   ```bash
-   cat > aws-deployment/deploy-all.sh << 'EOF'
-   #!/bin/bash
-   
-   echo "Starting deployment..."
-   
+   ```powershell
+   # Create the deploy-all.ps1 script
+   @'
+   # PowerShell script to deploy all components
+
+   Write-Host "Starting deployment..."
+
    # Deploy Lambda functions
-   ./deploy-lambda.sh
-   
+   Write-Host "Running Lambda deployment..."
+   & .\deploy-lambda.ps1
+
    # Deploy frontend
-   ./deploy-frontend.sh
-   
-   echo "Deployment complete!"
-   EOF
-   
-   chmod +x aws-deployment/deploy-all.sh
+   Write-Host "Running frontend deployment..."
+   & .\deploy-frontend.ps1
+
+   Write-Host "Deployment complete!"
+   '@ | Out-File -FilePath aws-deployment\deploy-all.ps1 -Encoding utf8
+   ```
+
+4. **Run the deployment scripts**:
+   ```powershell
+   # Navigate to the aws-deployment directory
+   Set-Location -Path aws-deployment
+
+   # Run the master deployment script
+   .\deploy-all.ps1
+
+   # Return to the project root
+   Set-Location -Path ..
    ```
 
 ## Security Considerations
@@ -867,4 +538,143 @@ Before starting the deployment process, ensure you have:
    - Click "Create parameter"
 
 2. **Update Lambda functions to use Parameter Store**:
-   - Add the following
+   - Add the AWS SDK for Systems Manager to your Lambda function
+   - Modify your code to retrieve the API key from Parameter Store
+   - Update the IAM role to include permissions for `ssm:GetParameter`
+
+### Restricting API Access
+
+1. **Set up API Key for API Gateway**:
+   - In API Gateway, go to "API Keys" in the left sidebar
+   - Click "Create API key"
+   - Enter a name for your API key
+   - Click "Save"
+   - Go to "Usage Plans" and create a new usage plan
+   - Associate your API key with the usage plan
+   - Associate your API stage with the usage plan
+
+2. **Configure CORS Properly**:
+   - Instead of allowing all origins (`*`), specify only the domains that need access
+   - Limit the allowed HTTP methods to only those needed
+   - Consider implementing a more restrictive CORS policy in production
+
+## Testing and Verification
+
+1. **Test Lambda Functions**:
+   - In the Lambda console, use the "Test" feature to create test events
+   - Create test events for each function with sample input data
+   - Verify that the functions return the expected output
+
+2. **Test API Gateway Endpoints**:
+   - Use a tool like Postman or curl to test your API endpoints
+   - Verify that the endpoints return the expected responses
+   - Test error handling by providing invalid input
+
+3. **Test Frontend Integration**:
+   - Open your CloudFront URL in a browser
+   - Verify that the frontend can communicate with the API
+   - Test all features of the application
+
+## Post-Deployment Steps
+
+### Accessing Your Application
+
+1. **Access via CloudFront URL**:
+   - After deployment is complete, you can access your application using the CloudFront URL
+   - This URL will look something like `https://d1234abcd.cloudfront.net`
+   - You can find this URL in the CloudFront console under "Distributions"
+
+2. **Access via Custom Domain**:
+   - Once DNS propagation is complete, you can access your application using your custom domain
+   - In this case, the URL would be `https://compare.my.useless.blog`
+   - This may take up to 48 hours after DNS configuration, but often completes within a few hours
+
+3. **Verify SSL Certificate**:
+   - Ensure that the SSL certificate is working correctly by checking for the padlock icon in your browser
+   - If there are certificate issues, check the ACM console to verify the certificate status
+
+### Using the Application
+
+1. **Search for TV Shows and Movies**:
+   - Use the search bar at the top of the application to search for TV shows and movies
+   - Enter a title or keyword and press Enter or click the search icon
+   - The application will display matching results from the TMDB API
+
+2. **View Project Details**:
+   - Click on a search result to view detailed information about the TV show or movie
+   - This includes cast, crew, ratings, release dates, and other metadata
+
+3. **Compare Projects**:
+   - Select multiple TV shows or movies to compare
+   - Click the "Compare" button to see a side-by-side comparison
+   - The comparison will highlight common cast and crew members between the selected projects
+
+4. **Share Comparisons**:
+   - Use the share button to generate a shareable link for your comparison
+   - This link can be sent to others to view the same comparison
+
+### Updating the Application
+
+1. **Update Frontend**:
+   - Make changes to the frontend code in your local development environment
+   - Test the changes locally
+   - Copy the updated files to the `aws-deployment/frontend` directory
+   - Run the frontend deployment script to update the S3 bucket and invalidate the CloudFront cache:
+     ```powershell
+     Set-Location -Path aws-deployment
+     .\deploy-frontend.ps1
+     ```
+
+2. **Update Lambda Functions**:
+   - Make changes to the Lambda function code in your local development environment
+   - Test the changes locally
+   - Update the files in the `aws-deployment/lambda` directory
+   - Run the Lambda deployment script to update the functions:
+     ```powershell
+     Set-Location -Path aws-deployment
+     .\prepare-lambda-packages.ps1
+     .\deploy-lambda.ps1
+     ```
+
+3. **Update API Gateway**:
+   - If you need to make changes to the API Gateway configuration:
+     - Make the changes in the API Gateway console
+     - Deploy the API again by clicking "Actions" and selecting "Deploy API"
+     - Select the "prod" stage and click "Deploy"
+     - Update the API endpoint in the frontend code if necessary
+
+## Troubleshooting
+
+### Common Issues
+
+1. **CORS Errors**:
+   - Verify that CORS is properly configured in API Gateway
+   - Check that the frontend is using the correct API endpoint
+   - Ensure that the necessary headers are included in the API responses
+
+2. **Lambda Function Errors**:
+   - Check CloudWatch Logs for error messages
+   - Verify that the IAM role has the necessary permissions
+   - Ensure that environment variables are correctly set
+
+3. **CloudFront Issues**:
+   - Check that the distribution is properly configured
+   - Verify that the origin is correctly set to your S3 bucket
+   - Ensure that the cache behavior is properly configured
+
+## Monitoring and Maintenance
+
+1. **Set up CloudWatch Alarms**:
+   - Create alarms for Lambda function errors
+   - Monitor API Gateway request counts and latency
+   - Set up notifications for when thresholds are exceeded
+
+2. **Regular Updates**:
+   - Keep dependencies up to date
+   - Regularly review and update IAM policies
+   - Monitor AWS service announcements for changes
+
+3. **Backup Strategy**:
+   - Regularly backup your DynamoDB table
+   - Keep a copy of your deployment files
+   - Document your infrastructure setup

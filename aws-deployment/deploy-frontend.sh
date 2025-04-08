@@ -6,7 +6,7 @@ CLOUDFRONT_DISTRIBUTION_ID="E2AXJVY25B1RRI"
 
 # Sync frontend files to S3
 echo "Uploading frontend files to S3..."
-aws s3 sync public/ s3://$S3_BUCKET/ --delete
+aws s3 sync ../public/ s3://$S3_BUCKET/ --delete
 
 # Invalidate CloudFront cache
 echo "Invalidating CloudFront cache..."
